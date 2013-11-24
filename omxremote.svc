@@ -1,0 +1,26 @@
+#!/bin/sh
+# /etc/init.d/omxremote
+#
+
+path=/projects/omxremote/
+
+case "$1" in
+  start)
+    cd $path && python omxremote.py &
+    pid=$!
+    echo "$pid" > /var/run/omxremote.pid
+    echo "Started omxremote (pid: $pid)"
+    ;;
+  stop)
+    pid=`cat /var/run/omxremote.pid`
+    kill -USR1 $pid
+    echo "Stopped omxremote (pid: $pid)"
+    ;;
+  *)
+    echo "Usage: start stop"
+    exit 1
+    ;;
+esac
+
+exit 0
+

@@ -74,9 +74,8 @@ class RestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == '/list/files':
             data = self.read_json_body()
-            print 'Request data: %s' % data
-
             path = data.get('path')
+
             if not path:
                 path = self.server.root_path
 
@@ -174,6 +173,80 @@ class RestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 player.toggle_subtitle_visibility()
                 self.send_ok()
 
+        elif self.path == '/subtitles/metadata':
+            data = self.read_json_body()
+            filename = data.get('filename')
+
+            query = util.SubtitleQuery(filename)
+            query.set_is_a_filename()
+            query.guess_season_and_episode()
+
+            response = {
+                'show': query.show,
+                'season': query.season,
+                'episode': query.episode,
+                'providers': [p.name() for p in util.Subtitles.providers()]
+            }
+
+            self.send_response_json(response)
+
+        elif self.path == '/subtitles/query':
+            data = self.read_json_body()
+
+            provider_name = data.get('provider')
+            filename = data.get('query')
+
+            print 'Executing query for %s on %s provider' % (filename, provider_name)
+
+            query = util.SubtitleQuery(filename)
+            query.set_is_a_filename()
+            query.guess_season_and_episode()
+
+            provider = util.Subtitles.provider_by_name(provider_name)
+            if provider:
+                self.send_response(httplib.OK)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+
+                for item in provider.query(query):
+                    util.Subtitles.Cache.add(provider, item)
+
+                    part = item.to_dict()
+                    print 'Found subtitle: %s' % part
+
+                    json.dump(part, self.wfile)
+
+                    self.wfile.write('\n')
+                    self.wfile.flush()
+
+            else:
+                self.send_error(httplib.BAD_REQUEST)
+
+            self.finish()
+
+        elif self.path == '/subtitles/download':
+            data = self.read_json_body()
+
+            provider_name = data.get('provider')
+            sub_id = data.get('id')
+            directory = data.get('directory')
+
+            provider = util.Subtitles.provider_by_name(provider_name)
+            item = util.Subtitles.Cache.get(provider, sub_id)
+
+            if item:
+                downloaded = provider.download(item.id, directory)
+                if downloaded:
+                    util.Subtitles.Cache.clear()
+
+                    self.send_response_json({'success': True, 'path': downloaded})
+
+                else:
+                    self.send_error(httplib.INTERNAL_SERVER_ERROR)
+
+            else:
+                self.send_error(httplib.NOT_FOUND)
+
     def read_json_body(self):
         length = int(self.headers.get('Content-Length', '0'))
         if length:
@@ -205,7 +278,7 @@ class RestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return self.server.start_player(video, subtitle)
 
 
-class Server(BaseHTTPServer.HTTPServer):  # SocketServer.ThreadingMixIn
+class Server(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 
     advertiser = None
     player = None

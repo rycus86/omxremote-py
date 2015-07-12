@@ -14,6 +14,7 @@ class SubtitleQuery(object):
 
     def __init__(self, text):
         self.text = text
+        self.show = None
         self.season = None
         self.episode = None
 
@@ -26,6 +27,9 @@ class SubtitleQuery(object):
     def guess_season_and_episode(self):
         guess = self.guess()
         if 'type' in guess and guess['type'] == 'episode':
+            if 'series' in guess:
+                self.show = util.camelcase(guess['series'])
+
             if 'season' in guess:
                 self.season = guess['season']
             if 'episodeNumber' in guess:
@@ -62,7 +66,7 @@ class SubtitleObject(object):
         self.id = SubtitleObject.__ID_GENERATOR.next()
         self.provider = provider.name()
         self.title = title
-        self.url = str(self.id) # TODO remove: url
+        self.url = str(self.id)  # TODO remove: url
         self.language = language
         self.extras = extras
     
@@ -76,6 +80,15 @@ class SubtitleObject(object):
             string += self.extras.replace(';', '_')
         string = string.replace('$', '_')
         return string
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'provider': self.provider,
+            'title': self.__safe_title(),
+            'language': self.language,
+            'extras': self.extras.replace(';', '_') if self.extras else ''
+        }
     
     def __safe_title(self):
         safe = self.title.replace(';', ' ')
@@ -110,12 +123,15 @@ class SubtitleQueryResults(object):
 
     def __init__(self):
         self.items = {}
+        self.__lock = threading.Lock()
 
     def get(self, provider, id):
-        if provider in self.items:
-            for item in self.items[provider]:
-                if item.id == id:
-                    return item
+        if provider and id:
+            with self.__lock:
+                if provider in self.items:
+                    for item in self.items[provider]:
+                        if str(item.id) == str(id):
+                            return item
 
     def set(self, items):
         self.items = items
@@ -124,10 +140,11 @@ class SubtitleQueryResults(object):
         self.items = {}
 
     def add(self, provider, item):
-        if provider not in self.items:
-            self.items[provider] = []
+        with self.__lock:
+            if provider not in self.items:
+                self.items[provider] = []
 
-        self.items[provider].append(item)
+            self.items[provider].append(item)
 
 
 class SubtitleProvider(object):

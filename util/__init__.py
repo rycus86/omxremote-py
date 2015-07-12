@@ -16,7 +16,7 @@ from client import start as start_client
 # subtitle modules
 import subtitles
 # enumerate modules to load subtitle providers from
-from subtitles import supersubtitles, addic7ed
+from subtitles import addic7ed, supersubtitles
 from subtitles.subliminal import opensubtitles
 
 import os
@@ -79,13 +79,16 @@ def recode_file(source):
         if charset.lower() == 'utf-8':
             pass # File is already encoded in UTF-8
         else:
-            exp  = charset + '..utf-8'
-            proc = subprocess.Popen([ 'recode', exp, source ])
-            ret  = proc.wait()
-            if ret == 0:
-                pass # File recoded
-            else:
-                print 'File [' + source + '] recode failed with code:', ret
+            try:
+                exp  = charset + '..utf-8'
+                proc = subprocess.Popen([ 'recode', exp, source ])
+                ret  = proc.wait()
+                if ret == 0:
+                    pass # File recoded
+                else:
+                    print 'File [' + source + '] recode failed with code:', ret
+            except OSError:
+                print 'File [' + source + '] recode failed, recode executable not found'
     else:
         pass # This file does not appear to be a plain text file
 

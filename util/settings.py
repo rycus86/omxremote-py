@@ -5,6 +5,8 @@ Created on Oct 10, 2013
 '''
 
 import sqlite3
+import threading
+
 
 class _Settings(object):
     
@@ -19,19 +21,18 @@ class _Settings(object):
     
     keys = [ k for (k, d, v, df, t, s) in all ]
     
-    __connection = None
+    __db_lock = threading.Lock()
     
     @classmethod
     def __connect(cls):
-        if _Settings.__connection is None:
-            db = sqlite3.connect('omxremote.db')
-            try:
-                db.execute('SELECT 1 FROM settings')
-            except:
-                # create database tables
-                with db: db.execute('CREATE TABLE settings (key PRIMARY KEY, value)')
-            _Settings.__connection = db
-        return _Settings.__connection
+        db = sqlite3.connect('omxremote.db')
+        try:
+            db.execute('SELECT 1 FROM settings')
+        except:
+            # create database tables
+            db.execute('CREATE TABLE settings (key PRIMARY KEY, value)')
+
+        return db
     
     @classmethod
     def default(cls, key):
@@ -56,23 +57,24 @@ class _Settings(object):
     
     @classmethod
     def get(cls, key):
-        with _Settings.__connect() as db:
-            value = db.execute('SELECT value FROM settings WHERE key = ?', (key, )).fetchone()
-            if value:
-                (ret, ) = value
-                return ret
-            else:
-                return _Settings.default(key)
+        with _Settings.__db_lock:
+            with _Settings.__connect() as db:
+                value = db.execute('SELECT value FROM settings WHERE key = ?', (key, )).fetchone()
+                if value:
+                    (ret, ) = value
+                    return ret
+                else:
+                    return _Settings.default(key)
     
     @classmethod
     def set(cls, key, value):
-        with _Settings.__connect() as db:
-            if value is None:
-                db.execute('DELETE FROM settings WHERE key = ?', (key, ))
-            else:
-                oldvalue = db.execute('SELECT value FROM settings WHERE key = ?', (key, )).fetchone()
-                if oldvalue:
-                    db.execute('UPDATE settings SET value = ? WHERE key = ?', (value, key, ))
+        with _Settings.__db_lock:
+            with _Settings.__connect() as db:
+                if value is None:
+                    db.execute('DELETE FROM settings WHERE key = ?', (key, ))
                 else:
-                    db.execute('INSERT INTO settings VALUES (?, ?)', (key, value, ))
-    
+                    oldvalue = db.execute('SELECT value FROM settings WHERE key = ?', (key, )).fetchone()
+                    if oldvalue:
+                        db.execute('UPDATE settings SET value = ? WHERE key = ?', (value, key, ))
+                    else:
+                        db.execute('INSERT INTO settings VALUES (?, ?)', (key, value, ))

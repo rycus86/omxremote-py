@@ -8,15 +8,31 @@ Created on Oct 1, 2013
 @author: rycus
 '''
 
-from util import player, mcast, settings, tvdb
+# utility modules
+from util import player, settings, tvdb
+
+from client import start as start_client
+
+# subtitle modules
+import subtitles
+# enumerate modules to load subtitle providers from
+from subtitles import supersubtitles, addic7ed
+from subtitles.subliminal import opensubtitles
 
 import os
+import re
+import subprocess
+import time
+import threading
 
 # declare utility classes
-class Flags(mcast._Flags): pass
-class MulticastHandler(mcast._MulticastHandler): pass
+# class Flags(mcast._Flags): pass
+# class MulticastHandler(mcast._MulticastHandler): pass
 class Settings(settings._Settings): pass
-class PlayerProcess(player._PlayerProcess): pass
+class PlayerProcess(player._DbusPlayer): pass
+
+class Subtitles(subtitles.SubtitleProvider): pass
+class SubtitleQuery(subtitles.SubtitleQuery): pass
 
 # -- Other utility methods --
 
@@ -40,10 +56,70 @@ def create_file_list(directory):
                     results.append(sub)
     
     results.sort()
-    
+
+    if directory != '/':  # has parent
+        results = ['../'] + results
+
+    return results
+
+def create_file_list_str(directory):
+    results = create_file_list(directory)
+
     has_parent = directory != '/'
-    
+
     if has_parent:
         return directory + '||../|' + ( '|'.join(results) )
     else:
         return directory + '||' + ( '|'.join(results) )
+
+def recode_file(source):
+    mime = subprocess.Popen([ 'file', '-bi', source ], stdout=subprocess.PIPE).stdout.read().strip()
+    if re.match('^text\\/.*; charset=.*$', mime):
+        charset = re.sub('^text\\/.*; charset=(.*)$', '\\1', mime)
+        if charset.lower() == 'utf-8':
+            pass # File is already encoded in UTF-8
+        else:
+            exp  = charset + '..utf-8'
+            proc = subprocess.Popen([ 'recode', exp, source ])
+            ret  = proc.wait()
+            if ret == 0:
+                pass # File recoded
+            else:
+                print 'File [' + source + '] recode failed with code:', ret
+    else:
+        pass # This file does not appear to be a plain text file
+
+def camelcase(val):
+    lst = val.split(' ')
+    for idx in xrange(len(lst)):
+        lst[idx] = lst[idx].capitalize()
+    return ' '.join(lst)
+
+class CountdownLatch(object):
+
+    def __init__(self, count):
+        self.__count = count
+        self.__condition = threading.Condition()
+
+    def countdown(self):
+        with self.__condition:
+            self.__count -= 1
+
+            if self.__count == 0:
+                self.__condition.notify()
+
+    def await(self, timeout = None):
+        start = time.time()
+        with self.__condition:
+            while self.__count > 0:
+                if timeout is not None:
+                    t_elapsed   = time.time() - start
+                    t_remaining = timeout - t_elapsed
+                    if t_remaining > 0:
+                        self.__condition.wait(t_remaining)
+                    else:
+                        return self.__count
+                else:
+                    self.__condition.wait()
+
+            return 0

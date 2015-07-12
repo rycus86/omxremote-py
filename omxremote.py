@@ -1,4 +1,4 @@
-'''
+"""
 RaspberryPi::omxplayer Remote for Android
 
 Wrapper for omxplayer on Raspberry Pi for starting videos 
@@ -7,7 +7,7 @@ and controlling playback, plus serving the Android client.
 Created on Oct 1, 2013
 
 @author: viktor.adam
-'''
+"""
 
 # TODO: settings for cli args
 import util
@@ -21,37 +21,37 @@ import time
 
 # default multicast communication parameters
 MCAST_GRP = '224.1.1.7'
-MCAST_PORT = 42001
+MCAST_PORT = 42002
 
 # Android message identifiers
-MSG_A_LOGIN         = 0xA1
-MSG_A_LIST_FILES    = 0xA2
-MSG_A_START_VIDEO   = 0xA3
-MSG_A_STOP_VIDEO    = 0xA4
-MSG_A_SET_VOLUME    = 0xA5
-MSG_A_SEEK_TO       = 0xA6
-MSG_A_PAUSE         = 0xA7
-MSG_A_SPEED_INC     = 0xA8
-MSG_A_SPEED_DEC     = 0xA9
-MSG_A_SUB_DELAY_INC = 0xAA
-MSG_A_SUB_DELAY_DEC = 0xAB
-MSG_A_SUB_TOGGLE    = 0xAC
-MSG_A_PLAYER_STATE  = 0xD1
-MSG_A_PLAYER_PARAMS = 0xD2
-MSG_A_PLAYER_INFO   = 0xD3
-MSG_A_PLAYER_EXTRA  = 0xD4
-MSG_A_KEEPALIVE     = 0xE0
-MSG_A_LIST_SETTINGS = 0xE1
-MSG_A_SET_SETTING   = 0xE2
-MSG_A_ERROR         = 0xF0
-MSG_A_EXIT          = 0xFE
+MSG_A_LOGIN             = 0xA1
+MSG_A_LIST_FILES        = 0xA2
+MSG_A_START_VIDEO       = 0xA3
+MSG_A_STOP_VIDEO        = 0xA4
+MSG_A_SET_VOLUME        = 0xA5
+MSG_A_SEEK_TO           = 0xA6
+MSG_A_PAUSE             = 0xA7
+MSG_A_SPEED_INC         = 0xA8
+MSG_A_SPEED_DEC         = 0xA9
+MSG_A_SUB_DELAY_INC     = 0xAA
+MSG_A_SUB_DELAY_DEC     = 0xAB
+MSG_A_SUB_TOGGLE        = 0xAC
+MSG_A_PLAYER_STATE      = 0xD1
+MSG_A_PLAYER_PARAMS     = 0xD2
+MSG_A_PLAYER_INFO       = 0xD3
+MSG_A_PLAYER_EXTRA      = 0xD4
+MSG_A_KEEPALIVE         = 0xE0
+MSG_A_LIST_SETTINGS     = 0xE1
+MSG_A_SET_SETTING       = 0xE2
+MSG_A_QUERY_SUBTITLES   = 0xE3 # TODO: Only for TV Shows for now
+MSG_A_DOWNLOAD_SUBTITLE = 0xE4
+MSG_A_ERROR             = 0xF0
+MSG_A_EXIT              = 0xFE
 
 MSG_A_ERROR_INVALID_SESSION = 0xF1
 
 # secret keyword for (a very basic) authentication
 secret_keypass      = 'RPi::omxremote'
-# default path for file listing
-default_path        = os.path.expanduser('~')
 # max socket buffer size ( = max message length )
 max_message_length  = 1500
 
@@ -59,36 +59,30 @@ max_message_length  = 1500
 # so they all see it False even if --debug was specified
 DEBUG = False
 
+def is_debug():
+    return DEBUG
+
 class Availability(object):
     def __init__(self):
-        self.guessit_available   = False
-        self.subliminal_available  = False
+        self.guessit_available     = False
 
 availability = Availability()
+
+class Defaults(object):
+    def __init__(self):
+        self.path = os.path.expanduser('~')
+
+defaults = Defaults()
 
 # pip install guessit
 def load_guessit(avl):
     try:
-        if DEBUG: print 'Loading guessit module ...'
+        if is_debug(): print 'Loading guessit module ...'
         import guessit  # @UnusedImport -- we are using this on another thread
-        if DEBUG: print 'Module loaded: guessit'
+        if is_debug(): print 'Module loaded: guessit'
         avl.guessit_available = True
     except ImportError:
-        if DEBUG: print 'guessit module not available'
-
-# pip install subliminal
-def load_subliminal(avl):
-    try:
-        if DEBUG: print 'Loading subliminal module ...'
-        import subliminal
-        if DEBUG: print 'Module loaded: subliminal'
-        if DEBUG: print 'Loading babelfish (for subliminal) module ...'
-        import babelfish
-        if DEBUG: print 'Module loaded: babelfish'
-        # TODO: search subtitles with subliminal
-        avl.subliminal_available = True
-    except ImportError:
-        if DEBUG: print 'subliminal module not available'
+        if is_debug(): print 'guessit module not available'
 
 # TODO: use IMDbPY for movies (and shows?)
 
@@ -128,7 +122,7 @@ def check_session(socket, sender, data):
     if sid == session.id:
         return (True, sid, data[36:])
     else:
-        if DEBUG: print 'Sending invalid session to', sender
+        if is_debug(): print 'Sending invalid session to', sender
         socket.send(MSG_A_ERROR_INVALID_SESSION, None, destination=sender)
         return (False, None, None)
 
@@ -166,13 +160,17 @@ def player_polling():
     # player exited
     session.socket.send(MSG_A_STOP_VIDEO, None, destination=session.address)
     session.clear_player()
-    if DEBUG: print 'Player exited'
+    if is_debug(): print 'Player exited'
 
-def camelcase(val):
-    lst = val.split(' ')
-    for idx in xrange(len(lst)):
-        lst[idx] = lst[idx].capitalize()
-    return ' '.join(lst)
+def guess_for_file(filename):
+    import guessit # this should be fast since it is pre-loaded here
+    
+    if is_debug(): print 'Processing guessit info for', filename
+    
+    guess = guessit.guess_video_info(filename)
+    if is_debug(): print 'Guessit response:', guess.nice_string()
+    
+    return guess
 
 def process_player_info():
     if session.info_parsed or not availability.guessit_available:
@@ -184,12 +182,7 @@ def process_player_info():
         
         return
     
-    import guessit # this should be fast since it is pre-loaded here
-    
-    if DEBUG: print 'Processing player info for', session.video
-    
-    guess = guessit.guess_video_info(session.video)
-    if DEBUG: print 'Guessit response:', guess.nice_string()
+    guess = guess_for_file(session.video)
     
     if 'type' in guess.keys():
         ftype = guess['type']
@@ -199,7 +192,7 @@ def process_player_info():
                 session.info_parsed = True
                 return
                 
-            show = camelcase(guess['series'])
+            show = util.camelcase(guess['series'])
             
             season = None
             if 'season' in guess.keys():
@@ -228,7 +221,7 @@ def process_player_info():
                 session.info_parsed = True
                 return
             
-            title = camelcase(guess['title'])
+            title = util.camelcase(guess['title'])
                 
             year = None
             if 'year' in guess.keys():
@@ -275,7 +268,7 @@ def process_episode_info(series, season, episode):
 
 # receiver implementation for Android clients
 def my_handler(sock, sender, header, data):
-    if DEBUG: print 'Received:', hex(header), data, '| From:', sender
+    if is_debug(): print 'Received:', hex(header), data, '| From:', sender
     
     if header == MSG_A_LOGIN:
         if data == secret_keypass:
@@ -285,7 +278,7 @@ def my_handler(sock, sender, header, data):
             session.socket  = sock
             session.address = sender
             
-            if DEBUG: print 'Current session:', sid
+            if is_debug(): print 'Current session:', sid
             
             # send back a unicast message
             sock.send(header, sid + ' (' + str( sock.get_buffer_size() ) + ')', destination=sender)
@@ -302,7 +295,7 @@ def my_handler(sock, sender, header, data):
         valid, sid, data = check_session(sock, sender, data)
         if valid:
             session.clear()
-            if DEBUG: print 'Current session exited'
+            if is_debug(): print 'Current session exited'
     
     elif header == MSG_A_KEEPALIVE:
         valid, sid, data = check_session(sock, sender, data)
@@ -313,7 +306,7 @@ def my_handler(sock, sender, header, data):
         valid, sid, directory = check_session(sock, sender, data)
         if valid:
             if not directory:
-                directory = default_path
+                directory = defaults.path
             
             flist = util.create_file_list(directory)
             sock.send(MSG_A_LIST_FILES, flist, destination=sender)
@@ -363,7 +356,7 @@ def my_handler(sock, sender, header, data):
                 
                 player = util.PlayerProcess(commands)
                 duration, volume = player.init()
-                if DEBUG: print 'Player started'
+                if is_debug(): print 'Player started'
                 
                 session.video  = os.path.basename(video)
                 session.info   = session.video
@@ -490,6 +483,101 @@ def my_handler(sock, sender, header, data):
                 util.Settings.set(key, value)
             else:
                 util.Settings.set(key, None)
+                
+    elif header == MSG_A_QUERY_SUBTITLES:
+        valid, sid, data = check_session(sock, sender, data)
+        if valid:
+            if len(data) > 2 and 'c$' == data[0:2]:
+                query = data[ 2 : data.find('$', 2) ]
+                info = data[ data.find('$', 2) + 1 : ]
+                season, episode = [int(x) for x in info.split('x')]
+
+                query_object = util.SubtitleQuery(query)
+                query_object.season = season
+                query_object.episode = episode
+            else:
+                query_object = util.SubtitleQuery(data)
+                query_object.set_is_a_filename()
+                query_object.guess_season_and_episode()
+
+                if query_object.season is None or query_object.episode is None:
+                    print 'File does not appear to be an episode of a TV show'
+                    sock.send(MSG_A_ERROR, 'File does not appear to be an episode of a TV show', destination=sender)
+                    return
+
+            util.Subtitles.Cache.clear()
+
+            providers = util.Subtitles.providers()
+            for provider in providers:
+
+                def do_query(provider, query_object, socket, sender):
+                    try:
+                        for item in provider.query(query_object):
+                            util.Subtitles.Cache.add(provider, item)
+                            socket.send(MSG_A_QUERY_SUBTITLES, item.to_string(), destination=sender)
+                    except Exception as ex:
+                        print 'Failed to look for an episode of', query_object.text, 'on', provider.name(), '|', ex
+
+                th_query = threading.Thread(
+                    target=do_query, args=(provider, query_object, sock, sender),
+                    name='Query|' + provider.name())
+                th_query.setDaemon(True)
+                th_query.start()
+
+            '''
+            results = {}
+            latch = util.CountdownLatch( len(providers) )
+
+            for provider in providers:
+                results[provider] = []
+                
+                def do_query(provider, query_object, results, latch):
+                    try:
+                        for item in provider.query(query_object):
+                            results[provider].append(item) # SubtitleObject
+                    except Exception as ex:
+                        print 'Failed to look for an episode of', query_object.text, 'on', provider.name(), '|', ex
+
+                    latch.countdown()
+
+                th_query = threading.Thread(
+                                target=do_query, args=(provider, query_object, results, latch),
+                                name='Query|' + provider.name())
+                th_query.setDaemon(True)
+                th_query.start()
+
+            latch.await(30)
+
+            util.Subtitles.Cache.set(results)
+            
+            if is_debug(): print 'Subtitle results:'
+            slist = []
+            for provider in results:
+                if is_debug(): print '---', provider.name(), '---'
+                for res in results[provider]:
+                    string = res.to_string()
+                    slist.append(string)
+                    if is_debug(): print '\t', string
+                    
+            response = '$'.join(slist)
+            
+            sock.send(MSG_A_QUERY_SUBTITLES, response, destination=sender)
+            '''
+    
+    elif header == MSG_A_DOWNLOAD_SUBTITLE:
+        valid, sid, data = check_session(sock, sender, data)
+        if valid:
+            pname, id, directory = data.split(';')
+            if is_debug(): print 'Trying to download subtitle from', pname
+            provider = util.Subtitles.provider_by_name(pname)
+            if provider:
+                dl = provider.download(id, directory)
+                if dl is None: dl = ''
+                sock.send(MSG_A_DOWNLOAD_SUBTITLE, dl, destination=sender)
+            else:
+                if is_debug(): print 'Failed to download subtitle, provider not found:', pname
+                sock.send(MSG_A_ERROR, 'Failed to download subtitle, provider not found: ' + str(pname), destination=sender)
+
 
 def wait_for_exit_signal():
     def handle_usr1(num, frame):
@@ -500,21 +588,24 @@ def wait_for_exit_signal():
                 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
-        if sys.argv[1] == '--debug':
-            DEBUG = True
-    
-    mh = util.MulticastHandler(MCAST_GRP, MCAST_PORT, handler=my_handler, buffer_size=max_message_length)
-    
+        for idx in xrange(1, len(sys.argv)):
+            if sys.argv[idx] == '--debug':
+                DEBUG = True
+            elif sys.argv[idx] == '--root':
+                if len(sys.argv) > idx+1:
+                    defaults.path = sys.argv[idx+1]
+                else:
+                    print '--root needs a path after it'
+
     # pre-load some modules
     threading.Thread(target=load_guessit, name='guessit|Loader', args=(availability,)).start()
-    # do not bother loading subliminal until it is integrated
-    # threading.Thread(target=load_subliminal, name='subliminal|Loader', args=(availability,)).start()
+
+    client = util.start_client(defaults.path, MCAST_GRP, MCAST_PORT)
+
+    try:
+        # raw_input('Press ENTER to exit\n')
+        wait_for_exit_signal()
+    except KeyboardInterrupt:
+        print 'Keyboard interrupt received, stopping now'
     
-    # raw_input('Press ENTER to exit\n')
-    wait_for_exit_signal()
-    
-    if session.player is not None:
-        session.player.exit()
-    session.clear()
-    
-    mh.shutdown()
+    client.shutdown()

@@ -54,7 +54,7 @@ class _MulticastHandler(object):
         
         bound_port = self.__mcast_sock.getsockname()[1]
         
-        if omxremote.DEBUG: print 'Multicast socket bound on', str(self.__group) + ':' + str(bound_port)
+        if omxremote.is_debug(): print 'Multicast socket bound on', str(self.__group) + ':' + str(bound_port)
     
     def __merge_incomplete(self, header, data, sender, finish):
         if sender not in self.__incomplete_messages:
@@ -89,7 +89,7 @@ class _MulticastHandler(object):
             except socket.timeout:
                 pass # no data received in timeout interval, but it is normal
             except Exception as ex:
-                if omxremote.DEBUG: 
+                if omxremote.is_debug():
                     print 'Exception received on multicast receiver thread:', ex
                     traceback.print_exc()
     

@@ -43,7 +43,7 @@ def parse_tvdb_info(series, season, episode):
     get_series_api = base_api_url + 'GetSeries.php?seriesname=' + urllib.quote_plus(series)
     sax.parse(get_series_api, __CHandler(parsed_data, 'Series')) # finish on first found entity
     
-    if omxremote.DEBUG:
+    if omxremote.is_debug():
         print 'TVDB| GetSeries data:'
         for k in parsed_data:
             print 'TVDB|     ', k, ':', parsed_data[k]
@@ -59,7 +59,7 @@ def parse_tvdb_info(series, season, episode):
     get_series_api = base_api_url + tvdb_api_key + '/series/' + seriesid
     sax.parse(get_series_api, __CHandler(parsed_data))
     
-    if omxremote.DEBUG:
+    if omxremote.is_debug():
         print 'TVDB| Series data:'
         for k in parsed_data:
             print 'TVDB|     ', k, ':', parsed_data[k]
@@ -76,7 +76,7 @@ def parse_tvdb_info(series, season, episode):
     get_episode_api = base_api_url + tvdb_api_key + '/series/' + seriesid + '/default/' + str(season) + '/' + str(episode)
     sax.parse(get_episode_api, __CHandler(parsed_data))
     
-    if omxremote.DEBUG:
+    if omxremote.is_debug():
         print 'TVDB| Episode data:'
         for k in parsed_data:
             print 'TVDB|     ', k, ':', parsed_data[k]

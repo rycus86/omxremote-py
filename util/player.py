@@ -49,16 +49,23 @@ class _DbusPlayer(object):
                 self.__dbus_properties = None
                 self.__dbus_keys = None
 
-                with open('/tmp/omxplayerdbus.%s' % os.getenv('USERNAME', 'root'), 'r+') as dbus_file:
-                    omxplayerdbus = dbus_file.read().strip()
+                omxplayerdbus = None
 
-                bus = dbus.bus.BusConnection(omxplayerdbus)
-                object = bus.get_object('org.mpris.MediaPlayer2.omxplayer', '/org/mpris/MediaPlayer2', introspect=False)
-                self.__dbus_properties = dbus.Interface(object, 'org.freedesktop.DBus.Properties')
-                self.__dbus_keys = dbus.Interface(object, 'org.mpris.MediaPlayer2.Player')
+                for suffix in (os.getenv('USERNAME', 'root'), os.getenv('USER', 'root'), ''):
+                    dbus_file_path = '/tmp/omxplayerdbus.%s' % suffix
+                    if os.path.exists(dbus_file_path):
+                        with open(dbus_file_path, 'r+') as dbus_file:
+                            omxplayerdbus = dbus_file.read().strip()
+                            break
 
-                if self.__dbus_properties and self.__dbus_keys:
-                    break
+                if omxplayerdbus:
+                    bus = dbus.bus.BusConnection(omxplayerdbus)
+                    object = bus.get_object('org.mpris.MediaPlayer2.omxplayer', '/org/mpris/MediaPlayer2', introspect=False)
+                    self.__dbus_properties = dbus.Interface(object, 'org.freedesktop.DBus.Properties')
+                    self.__dbus_keys = dbus.Interface(object, 'org.mpris.MediaPlayer2.Player')
+    
+                    if self.__dbus_properties and self.__dbus_keys:
+                        break
             except:
                 if omxremote.is_debug(): 'DBus is not ready'
 

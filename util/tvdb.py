@@ -8,6 +8,7 @@ import omxremote
 
 import xml.sax as sax
 import urllib
+import traceback
 
 tvdb_api_key = '5EDB240BB69AA812'
 
@@ -15,9 +16,12 @@ base_api_url    = 'http://thetvdb.com/api/'
 base_banner_url = 'http://thetvdb.com/banners/'
 base_imdb_url   = 'http://www.imdb.com/title/'
 
+
 class __CHandler(sax.ContentHandler):
+
     def __init__(self, data_map, end_element=None):
-        self.current  = None
+        sax.ContentHandler.__init__(self)
+        self.current = None
         self.data_map = data_map
         self.data_map.clear()
         self.end_element = end_element
@@ -37,11 +41,17 @@ class __CHandler(sax.ContentHandler):
         if self.end_element and name == self.end_element:
             self.finished = True
 
+
 def parse_tvdb_info(series, season, episode):
     parsed_data = { }
     
     get_series_api = base_api_url + 'GetSeries.php?seriesname=' + urllib.quote_plus(series)
-    sax.parse(get_series_api, __CHandler(parsed_data, 'Series')) # finish on first found entity
+
+    try:
+        sax.parse(get_series_api, __CHandler(parsed_data, 'Series'))  # finish on first found entity
+    except sax.SAXException:
+        print 'Failed to parse initial TVDB data at %s' % get_series_api
+        traceback.print_exc()
     
     if omxremote.is_debug():
         print 'TVDB| GetSeries data:'
@@ -57,7 +67,12 @@ def parse_tvdb_info(series, season, episode):
     series_data['id'] = seriesid
         
     get_series_api = base_api_url + tvdb_api_key + '/series/' + seriesid
-    sax.parse(get_series_api, __CHandler(parsed_data))
+
+    try:
+        sax.parse(get_series_api, __CHandler(parsed_data))
+    except sax.SAXException:
+        print 'Failed to parse TVDB series data at %s' % get_series_api
+        traceback.print_exc()
     
     if omxremote.is_debug():
         print 'TVDB| Series data:'
@@ -74,7 +89,12 @@ def parse_tvdb_info(series, season, episode):
     episode_data = { }
     
     get_episode_api = base_api_url + tvdb_api_key + '/series/' + seriesid + '/default/' + str(season) + '/' + str(episode)
-    sax.parse(get_episode_api, __CHandler(parsed_data))
+
+    try:
+        sax.parse(get_episode_api, __CHandler(parsed_data))
+    except sax.SAXException:
+        print 'Failed to parse TVDB episode data at %s' % get_episode_api
+        traceback.print_exc()
     
     if omxremote.is_debug():
         print 'TVDB| Episode data:'

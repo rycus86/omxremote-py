@@ -20,17 +20,6 @@ class _DbusPlayer(object):
     def __init__(self, video, subtitle, args):
         self.__args = args
 
-        self.__exit_requested = False
-
-        self.__process = None
-
-        self.__start_process()
-
-        self.__dbus_properties = None
-        self.__dbus_keys = None
-
-        self.__initialize_dbus()
-
         self.video = video
         self.subtitle = subtitle
 
@@ -39,6 +28,19 @@ class _DbusPlayer(object):
 
         self.extra = None
         self.extra_parsed = False
+
+        self.get_info()  # pre-load info
+        self.get_extras()  # pre-load extras
+
+        self.__exit_requested = False
+        self.__process = None
+
+        self.__start_process()
+
+        self.__dbus_properties = None
+        self.__dbus_keys = None
+
+        self.__initialize_dbus()
 
     def __start_process(self):
         self.__process = subprocess.Popen(self.__args)
@@ -63,7 +65,7 @@ class _DbusPlayer(object):
                     object = bus.get_object('org.mpris.MediaPlayer2.omxplayer', '/org/mpris/MediaPlayer2', introspect=False)
                     self.__dbus_properties = dbus.Interface(object, 'org.freedesktop.DBus.Properties')
                     self.__dbus_keys = dbus.Interface(object, 'org.mpris.MediaPlayer2.Player')
-    
+
                     if self.__dbus_properties and self.__dbus_keys:
                         break
             except:
@@ -150,7 +152,7 @@ class _DbusPlayer(object):
         elif info and 'title' in info:
             return info['title']
         else:
-            return self.video
+            return os.path.basename(self.video)
 
     def get_alt_title(self):
         info = self.get_info()

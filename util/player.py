@@ -165,98 +165,93 @@ class _DbusPlayer(object):
             return ''
 
     def get_info(self):
-        guessit_available = False
         try:
-            import guessit
-            guessit_available = True
-        except ImportError:
-            pass  # guessit not available
+            guessit_available = False
+            try:
+                import guessit
+                guessit_available = True
+            except ImportError:
+                pass  # guessit not available
 
-        if self.info_parsed or not guessit_available:
+            if self.info_parsed or not guessit_available:
+                return self.info
+
+            print 'Loading info for %s' % self.video
+
+            guess = guessit.guess_video_info(os.path.basename(self.video))
+            print 'Guessit response:', guess.nice_string()
+
+            if 'type' in guess.keys():
+                ftype = guess['type']
+
+                print 'Guessit file type: %s' % ftype
+
+                if ftype == 'episode':
+                    if 'series' not in guess.keys():
+                        return
+
+                    show = util.camelcase(guess['series'])
+
+                    season = int(guess.get('season', '0'))
+                    episode = int(guess.get('episodeNumber', '0'))
+
+                    self.info = {
+                        'type': 'episode',
+                        'title': show,
+                        'season': season,
+                        'episode': episode
+                    }
+
+                elif ftype == 'movie':
+                    if 'title' not in guess.keys():
+                        return
+
+                    title = util.camelcase(guess['title'])
+                    year = guess.get('year')
+
+                    self.info = {
+                        'type': 'movie',
+                        'title': title,
+                        'year': year
+                    }
+
             return self.info
-
-        print 'Loading info for %s' % self.video
-
-        guess = guessit.guess_video_info(os.path.basename(self.video))
-        print 'Guessit response:', guess.nice_string()
-
-        if 'type' in guess.keys():
-            ftype = guess['type']
-
-            print 'Guessit file type: %s' % ftype
-
-            if ftype == 'episode':
-                if 'series' not in guess.keys():
-                    self.info_parsed = True
-                    return
-
-                show = util.camelcase(guess['series'])
-
-                season = int(guess.get('season', '0'))
-                episode = int(guess.get('episodeNumber', '0'))
-
-                self.info = {
-                    'type': 'episode',
-                    'title': show,
-                    'season': season,
-                    'episode': episode
-                }
-
-                self.info_parsed = True
-
-                if show and season and episode:
-                    self.get_extras()  # pre-load extras
-
-            elif ftype == 'movie':
-                if 'title' not in guess.keys():
-                    self.info_parsed = True
-                    return
-
-                title = util.camelcase(guess['title'])
-                year = guess.get('year')
-
-                self.info = {
-                    'type': 'movie',
-                    'title': title,
-                    'year': year
-                }
-
-                self.info_parsed = True
-
-        return self.info
+        finally:
+            self.info_parsed = True
 
     def get_extras(self):
         if self.extra_parsed:
             return self.extra
 
-        info = self.get_info()
-        if not info or info.get('type', '') != 'episode':
+        try:
+            info = self.get_info()
+            if not info or info.get('type', '') != 'episode':
+                return
+
+            print 'Loading extras for %s | info: %s' % (self.video, info)
+
+            series = info.get('title')
+            season = info.get('season')
+            episode = info.get('episode')
+
+            sd, ed = util.tvdb.parse_tvdb_info(series, season, episode)
+
+            extras = {}
+
+            # series data
+            if 'title'  in sd: extras['ST'] = sd['title']
+            if 'imdb'   in sd: extras['SI'] = sd['imdb']
+            if 'poster' in sd: extras['SP'] = sd['poster']
+
+            # episode data
+            if 'title'  in ed: extras['ET'] = ed['title']
+            if 'date'   in ed: extras['ED'] = ed['date']
+            if 'rating' in ed: extras['ER'] = ed['rating']
+            if 'imdb'   in ed: extras['EI'] = ed['imdb']
+            if 'poster' in ed: extras['EP'] = ed['poster']
+
+            self.extra = extras
+
+            return self.extra
+        finally:
             self.extra_parsed = True
-            return
-
-        print 'Loading extras for %s | info: %s' % (self.video, info)
-
-        series = info.get('title')
-        season = info.get('season')
-        episode = info.get('episode')
-
-        sd, ed = util.tvdb.parse_tvdb_info(series, season, episode)
-
-        extras = {}
-
-        # series data
-        if 'title'  in sd: extras['ST'] = sd['title']
-        if 'imdb'   in sd: extras['SI'] = sd['imdb']
-        if 'poster' in sd: extras['SP'] = sd['poster']
-
-        # episode data
-        if 'title'  in ed: extras['ET'] = ed['title']
-        if 'date'   in ed: extras['ED'] = ed['date']
-        if 'rating' in ed: extras['ER'] = ed['rating']
-        if 'imdb'   in ed: extras['EI'] = ed['imdb']
-        if 'poster' in ed: extras['EP'] = ed['poster']
-
-        self.extra = extras
-        self.extra_parsed = True
-
-        return self.extra

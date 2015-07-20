@@ -57,7 +57,7 @@ def create_file_list(directory):
                     results.append(sub)
 
     def _looks_like_episode_folder(item):
-        return re.match('^[0-9]+x[0-9]+$', item)
+        return re.match('^[0-9]+x[0-9]+/$', item)
 
     def _compare_episode_folders(item_a, item_b):
         if not _looks_like_episode_folder(item_a):
@@ -68,8 +68,8 @@ def create_file_list(directory):
         elif not _looks_like_episode_folder(item_b):
             return -1
 
-        sa, ea = map(int, re.match('^([0-9]+)x([0-9]+)$', item_a).groups())
-        sb, eb = map(int, re.match('^([0-9]+)x([0-9]+)$', item_b).groups())
+        sa, ea = map(int, re.match('^([0-9]+)x([0-9]+)/$', item_a).groups())
+        sb, eb = map(int, re.match('^([0-9]+)x([0-9]+)/$', item_b).groups())
 
         result = -cmp(sa, sb)
         if not result:

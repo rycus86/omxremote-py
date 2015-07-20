@@ -46,16 +46,43 @@ def create_file_list(directory):
     
     if os.path.exists(directory):
         for sub in os.listdir(directory):
-            if sub[0] == '.': continue # hidden files
+            if sub[0] == '.':
+                continue  # hidden files
             
             if os.path.isdir(os.path.join(directory, sub)):
                 results.append(sub + '/')
             else:
-                fname, ext = os.path.splitext(sub)  # @UnusedVariable
+                _, ext = os.path.splitext(sub)
                 if ext.lower() in video_extensions or ext.lower() in subtitle_extensions:
                     results.append(sub)
-    
-    results.sort()
+
+    def _looks_like_episode_folder(item):
+        return re.match('^[0-9]+x[0-9]+$', item)
+
+    def _compare_episode_folders(item_a, item_b):
+        if not _looks_like_episode_folder(item_a):
+            if not _looks_like_episode_folder(item_b):
+                return cmp(item_a, item_b)
+            else:
+                return 1
+        elif not _looks_like_episode_folder(item_b):
+            return -1
+
+        sa, ea = map(int, re.match('^([0-9]+)x([0-9]+)$', item_a).groups())
+        sb, eb = map(int, re.match('^([0-9]+)x([0-9]+)$', item_b).groups())
+
+        result = -cmp(sa, sb)
+        if not result:
+            return -cmp(ea, eb)
+        else:
+            return result
+
+    contains_episode_folders = float(len(filter(_looks_like_episode_folder, results))) / len(results) >= 0.50
+
+    if contains_episode_folders:
+        results.sort(cmp=_compare_episode_folders)
+    else:
+        results.sort()
 
     if directory != '/':  # has parent
         results = ['../'] + results
